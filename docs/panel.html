@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Panel nauczyciela – Upadek Rzeczypospolitej</title>
+<style>
+  :root{--ink:#1b1b1b;--muted:#5d5d5d;--bar:#d9d9d9;--desk:#eeece7;--paper:#fff;--accent:#7a1f1f;
+    --ok:#1f6b3a;--okbg:#e7f3ea;--bad:#a32020;--badbg:#fbeaea;--line:#d6d2c8}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--desk);color:var(--ink);font:15px/1.45 Aptos,"Segoe UI",Calibri,Carlito,Arial,sans-serif}
+  header.gora{background:#2b2b2b;color:#fff;padding:12px 20px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+  header.gora h1{margin:0;font-size:18px}
+  header.gora .sub{color:#c9c9c9;font-size:13px}
+  .wrap{max-width:1100px;margin:0 auto;padding:18px 16px 40px}
+  .karta{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:16px 18px;margin-bottom:16px}
+  button,select,input{font:inherit}
+  button{padding:7px 14px;border-radius:6px;border:1px solid #444;background:#fff;cursor:pointer}
+  button.glowny{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+  button:disabled{opacity:.45;cursor:default}
+  .pasek-narz{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .pasek-narz .odstep{flex:1}
+  .zakladki button{border-radius:6px 6px 0 0;border-bottom:0;background:#e4e1da}
+  .zakladki button.akt{background:var(--paper);font-weight:700}
+  table{border-collapse:collapse;width:100%}
+  th,td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top}
+  th{font-size:13px;color:var(--muted);font-weight:600;white-space:nowrap}
+  td.liczba,th.liczba{text-align:right;white-space:nowrap}
+  tr.wiersz{cursor:pointer} tr.wiersz:hover{background:#f6f4ef}
+  .tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:10px;background:#eee;color:#333}
+  .tag.do{background:#fff3cd;color:#7a5a00} .tag.gotowe{background:var(--okbg);color:var(--ok)}
+  .el{border-top:1px solid var(--line);padding:12px 0}
+  .el:first-child{border-top:0}
+  .el h3{margin:0 0 6px;font-size:15px}
+  .odp{background:#f7f6f2;border-left:3px solid #8a8a8a;padding:6px 10px;white-space:pre-wrap;margin:4px 0}
+  .odp .lab{color:var(--muted);font-size:13px}
+  .pusta{color:#999;font-style:italic}
+  .klucz{font-size:13px;color:#24452f;background:var(--okbg);border-radius:6px;padding:6px 10px;margin:6px 0}
+  .ocena{display:flex;gap:6px;align-items:center;margin-top:6px}
+  .ocena button{min-width:44px;font-weight:700}
+  .ocena button.wyb0{background:var(--badbg);border-color:var(--bad);color:var(--bad)}
+  .ocena button.wyb1{background:var(--okbg);border-color:var(--ok);color:var(--ok)}
+  .auto td{padding:4px 8px} .auto .dobra{color:var(--ok)} .auto .zla{color:var(--bad);font-weight:700}
+  .podsum{display:flex;flex-wrap:wrap;gap:18px;font-size:15px}
+  .podsum b{font-size:20px}
+  .komunikat{min-height:20px;font-size:13px;color:var(--muted)}
+  .logowanie{max-width:380px;margin:60px auto}
+  .logowanie input{width:100%;padding:8px 10px;border:1px solid #999;border-radius:6px;margin:8px 0 12px}
+  .blad{color:var(--bad)}
+  .nawig{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  @media print{header.gora,.pasek-narz,.zakladki,.nawig,.ocena{display:none!important} body{background:#fff} .karta{border:0}}
+</style>
+</head>
+<body>
+<header class="gora">
+  <div><h1>Panel nauczyciela</h1><div class="sub">Sprawdzian: Upadek Rzeczypospolitej · 16 pkt</div></div>
+  <div class="sub" id="status"></div>
+</header>
+
+<div class="wrap">
+  <div class="karta logowanie" id="ekran-logowania">
+    <h2 style="margin-top:0">Logowanie</h2>
+    <label for="haslo">Hasło do panelu</label>
+    <input type="password" id="haslo" autocomplete="current-password">
+    <button class="glowny" id="btn-zaloguj">Pobierz prace</button>
+    <p class="komunikat" id="kom-log"></p>
+  </div>
+
+  <div id="ekran-panelu" hidden>
+    <div class="pasek-narz" style="margin-bottom:12px">
+      <label>Klasa: <select id="filtr-klasa"><option value="">wszystkie</option></select></label>
+      <span class="odstep"></span>
+      <button id="btn-odswiez">Odśwież</button>
+      <button id="btn-csv">Pobierz wyniki (CSV)</button>
+      <button id="btn-wyloguj">Wyloguj</button>
+    </div>
+    <div class="zakladki" id="zakladki">
+      <button data-widok="lista" class="akt">Uczniowie</button><button data-widok="zadania">Ocenianie po zadaniach</button>
+    </div>
+    <div class="karta" id="widok" style="border-top-left-radius:0"></div>
+    <p class="komunikat" id="kom"></p>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  // Adres aplikacji internetowej Google Apps Script (ten sam co na stronie ucznia).
+  var ADRES = "https://script.google.com/macros/s/AKfycbza00J-MCjksI9Zf7B8oydpLlXHYWLfoUmEVn3sQlh4cu8pFv8OCBjiK1COpq6vo6Wcjw/exec";
+  var SESJA = "upadekrp-panel-haslo";
+  var K = null, prace = [], widok = "lista", wybranyUczen = null, wybraneZadanie = null;
+
+  var $ = function(id){ return document.getElementById(id); };
+  function esc(s){ return String(s == null ? "" : s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+  function komunikat(t, blad){ var k = $("kom"); k.textContent = t; k.className = "komunikat" + (blad ? " blad" : ""); }
+
+  function zapytanie(dane){
+    return fetch(ADRES, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify(dane)})
+      .then(function(r){ return r.json(); });
+  }
+
+  // ---------- punktacja ----------
+  function punktyAuto(p, grupa){
+    var n = 0;
+    Object.keys(grupa.pola).forEach(function(k){ if ((p.odp[k] || "") === grupa.pola[k]) n++; });
+    for (var i = 0; i < grupa.prog.length; i++) if (n >= grupa.prog[i][0]) return grupa.prog[i][1];
+    return 0;
+  }
+  function wynik(p){
+    var auto = 0, autoMax = 0, otw = 0, ocenione = 0;
+    K.auto.forEach(function(g){ auto += punktyAuto(p, g); autoMax += g.max; });
+    K.otwarte.forEach(function(e){ var v = p.ocena[e.id]; if (v === 0 || v === 1){ otw += v; ocenione++; } });
+    var gotowe = ocenione === K.otwarte.length;
+    return {auto:auto, autoMax:autoMax, otw:otw, ocenione:ocenione, gotowe:gotowe, suma:auto + otw};
+  }
+
+  // ---------- dane ----------
+  function pobierz(haslo){
+    $("status").textContent = "Pobieranie…";
+    return zapytanie({akcja:"lista", haslo:haslo}).then(function(j){
+      if (!j.ok) throw new Error(j.blad === "haslo" ? "Nieprawidłowe hasło." : "Błąd serwera: " + j.blad);
+      K = j.klucz;
+      prace = j.prace.map(function(p){ p.odp = p.odp || {}; p.ocena = p.ocena || {}; return p; })
+        .sort(function(a, b){ return (a.klasa + a.imie).localeCompare(b.klasa + b.imie, "pl"); });
+      try { sessionStorage.setItem(SESJA, haslo); } catch(e){}
+      $("ekran-logowania").hidden = true; $("ekran-panelu").hidden = false;
+      $("status").textContent = "Pobrano: " + new Date().toLocaleTimeString("pl-PL", {hour:"2-digit", minute:"2-digit"});
+      odswiezFiltr(); rysuj();
+    });
+  }
+  function haslo(){ try { return sessionStorage.getItem(SESJA) || ""; } catch(e){ return ""; } }
+
+  function widoczne(){
+    var k = $("filtr-klasa").value;
+    return prace.filter(function(p){ return !k || p.klasa === k; });
+  }
+  function odswiezFiltr(){
+    var sel = $("filtr-klasa"), stara = sel.value;
+    var klasy = Array.from(new Set(prace.map(function(p){ return p.klasa; }))).sort();
+    sel.innerHTML = '<option value="">wszystkie</option>' + klasy.map(function(k){ return '<option>' + esc(k) + '</option>'; }).join("");
+    sel.value = klasy.indexOf(stara) >= 0 ? stara : "";
+  }
+
+  var kolejka = Promise.resolve();
+  function ocen(p, idEl, v){
+    p.ocena[idEl] = v;
+    var w = wynik(p);
+    komunikat("Zapisywanie…");
+    var dane = {akcja:"ocena", haslo:haslo(), id:p.id, ocena:p.ocena, suma: w.gotowe ? w.suma : ""};
+    kolejka = kolejka.then(function(){ return zapytanie(dane); }).then(function(j){
+      if (!j.ok) throw new Error(j.blad);
+      komunikat("Zapisano ocenę: " + p.imie + ".");
+    }).catch(function(e){ komunikat("Nie udało się zapisać oceny (" + e.message + "). Spróbuj ponownie.", true); });
+  }
+
+  // ---------- widoki ----------
+  function rysuj(){
+    document.querySelectorAll("#zakladki button").forEach(function(b){ b.classList.toggle("akt", b.dataset.widok === widok && !wybranyUczen); });
+    if (wybranyUczen) return rysujUcznia();
+    if (widok === "zadania") return rysujZadania();
+    rysujListe();
+  }
+
+  function rysujListe(){
+    var lista = widoczne();
+    if (!lista.length){ $("widok").innerHTML = "<p>Nie ma jeszcze oddanych prac.</p>"; return; }
+    var doOceny = lista.filter(function(p){ return !wynik(p).gotowe; }).length;
+    var html = '<p class="podsum"><span>Oddane prace: <b>' + lista.length + '</b></span><span>Do dokończenia oceny: <b>' + doOceny + '</b></span></p>' +
+      '<table><tr><th>Uczeń</th><th>Klasa</th><th>Oddano</th><th class="liczba">Zamknięte</th><th class="liczba">Otwarte</th><th class="liczba">Suma</th><th class="liczba">%</th><th>Status</th></tr>';
+    lista.forEach(function(p){
+      var w = wynik(p), d = new Date(p.oddano);
+      html += '<tr class="wiersz" data-id="' + esc(p.id) + '"><td>' + esc(p.imie || "(bez nazwiska)") + '</td><td>' + esc(p.klasa) + '</td>' +
+        '<td>' + d.toLocaleDateString("pl-PL") + ' ' + d.toLocaleTimeString("pl-PL", {hour:"2-digit", minute:"2-digit"}) + '</td>' +
+        '<td class="liczba">' + w.auto + ' / ' + w.autoMax + '</td>' +
+        '<td class="liczba">' + w.otw + ' / ' + K.otwarte.length + (w.gotowe ? '' : ' <span class="pusta">(' + w.ocenione + ' ocen.)</span>') + '</td>' +
+        '<td class="liczba"><b>' + w.suma + '</b> / ' + K.max + '</td>' +
+        '<td class="liczba">' + Math.round(w.suma / K.max * 100) + '%</td>' +
+        '<td>' + (w.gotowe ? '<span class="tag gotowe">ocenione</span>' : '<span class="tag do">do oceny</span>') + '</td></tr>';
+    });
+    $("widok").innerHTML = html + '</table>';
+    $("widok").querySelectorAll("tr.wiersz").forEach(function(tr){
+      tr.addEventListener("click", function(){ wybranyUczen = tr.dataset.id; rysuj(); window.scrollTo(0, 0); });
+    });
+  }
+
+  function pokazOdp(p, pola){
+    return pola.map(function(n){
+      var v = (p.odp[n] || "").trim();
+      var lab = /_r$/.test(n) ? "Rozstrzygnięcie: " : /_u$/.test(n) ? "Uzasadnienie: " : "";
+      return '<div class="odp">' + (lab ? '<span class="lab">' + lab + '</span>' : '') + (v ? esc(v) : '<span class="pusta">brak odpowiedzi</span>') + '</div>';
+    }).join("");
+  }
+  function przyciski(p, e){
+    var v = p.ocena[e.id];
+    return '<div class="ocena" data-id="' + esc(p.id) + '" data-el="' + e.id + '"><span>Punkty:</span>' +
+      '<button data-v="0" class="' + (v === 0 ? "wyb0" : "") + '">0</button>' +
+      '<button data-v="1" class="' + (v === 1 ? "wyb1" : "") + '">1</button></div>';
+  }
+  function podepnijPrzyciski(poKliknieciu){
+    $("widok").querySelectorAll(".ocena button").forEach(function(b){
+      b.addEventListener("click", function(){
+        var box = b.parentNode, p = prace.find(function(x){ return x.id === box.dataset.id; });
+        var e = K.otwarte.find(function(x){ return x.id === box.dataset.el; });
+        ocen(p, e.id, Number(b.dataset.v));
+        box.querySelectorAll("button").forEach(function(x){ x.className = ""; });
+        b.className = "wyb" + b.dataset.v;
+        if (poKliknieciu) poKliknieciu(p);
+      });
+    });
+  }
+
+  function rysujUcznia(){
+    var lista = widoczne(), i = lista.findIndex(function(x){ return x.id === wybranyUczen; });
+    var p = lista[i] || prace.find(function(x){ return x.id === wybranyUczen; });
+    if (!p){ wybranyUczen = null; return rysuj(); }
+    var w = wynik(p);
+    var html = '<div class="nawig"><button id="n-wroc">← Lista</button>' +
+      '<button id="n-poprz"' + (i > 0 ? '' : ' disabled') + '>‹ Poprzedni</button>' +
+      '<button id="n-nast"' + (i >= 0 && i < lista.length - 1 ? '' : ' disabled') + '>Następny ›</button>' +
+      '<button id="n-nieoc">Następny nieoceniony</button><span class="odstep" style="flex:1"></span>' +
+      '<button id="n-usun">Usuń pracę</button></div>' +
+      '<h2 style="margin:4px 0">' + esc(p.imie || "(bez nazwiska)") + ' <span style="font-weight:400;color:#666">· ' + esc(p.klasa) + '</span></h2>' +
+      '<p class="podsum" id="podsum-ucznia"></p>';
+
+    html += '<h3>Zadania zamknięte (sprawdzone automatycznie)</h3><table class="auto">';
+    K.auto.forEach(function(g){
+      var odp = Object.keys(g.pola).map(function(k){
+        var v = p.odp[k] || "–", ok = v === g.pola[k];
+        return '<span class="' + (ok ? "dobra" : "zla") + '">' + esc(g.etykiety[k]) + ': ' + esc(v) + (ok ? '' : ' (klucz: ' + g.pola[k] + ')') + '</span>';
+      }).join("; ");
+      html += '<tr><td>' + esc(g.tytul) + '</td><td>' + odp + '</td><td class="liczba"><b>' + punktyAuto(p, g) + '</b> / ' + g.max + '</td></tr>';
+    });
+    html += '</table><h3 style="margin-top:18px">Zadania otwarte</h3>';
+    K.otwarte.forEach(function(e){
+      html += '<div class="el"><h3>' + esc(e.tytul) + '</h3>' + pokazOdp(p, e.pola) +
+        '<div class="klucz">' + esc(e.klucz) + '</div>' + przyciski(p, e) + '</div>';
+    });
+    $("widok").innerHTML = html;
+    function podsum(){
+      var w = wynik(p);
+      $("podsum-ucznia").innerHTML = '<span>Zamknięte: <b>' + w.auto + '</b> / ' + w.autoMax + '</span><span>Otwarte: <b>' + w.otw + '</b> / ' + K.otwarte.length +
+        ' (ocenione ' + w.ocenione + ')</span><span>Razem: <b>' + w.suma + '</b> / ' + K.max + ' (' + Math.round(w.suma / K.max * 100) + '%)</span>';
+    }
+    podsum(); podepnijPrzyciski(podsum);
+    $("n-wroc").onclick = function(){ wybranyUczen = null; rysuj(); };
+    $("n-poprz").onclick = function(){ wybranyUczen = lista[i - 1].id; rysuj(); window.scrollTo(0, 0); };
+    $("n-nast").onclick = function(){ wybranyUczen = lista[i + 1].id; rysuj(); window.scrollTo(0, 0); };
+    $("n-nieoc").onclick = function(){
+      var nast = lista.slice(i + 1).concat(lista.slice(0, Math.max(i, 0))).find(function(x){ return x.id !== p.id && !wynik(x).gotowe; });
+      if (nast){ wybranyUczen = nast.id; rysuj(); window.scrollTo(0, 0); } else komunikat("Wszystkie prace są ocenione.");
+    };
+    $("n-usun").onclick = function(){
+      if (!confirm("Usunąć pracę: " + (p.imie || "bez nazwiska") + "? Tej operacji nie można cofnąć.")) return;
+      zapytanie({akcja:"usun", haslo:haslo(), id:p.id}).then(function(j){
+        if (!j.ok) throw new Error(j.blad);
+        prace = prace.filter(function(x){ return x.id !== p.id; }); wybranyUczen = null; odswiezFiltr(); rysuj(); komunikat("Usunięto pracę.");
+      }).catch(function(e){ komunikat("Nie udało się usunąć (" + e.message + ").", true); });
+    };
+  }
+
+  function rysujZadania(){
+    if (!wybraneZadanie) wybraneZadanie = K.otwarte[0].id;
+    var e = K.otwarte.find(function(x){ return x.id === wybraneZadanie; });
+    var lista = widoczne();
+    var html = '<div class="pasek-narz" style="margin-bottom:8px"><label>Element: <select id="wyb-zad">' +
+      K.otwarte.map(function(x){
+        var brak = lista.filter(function(p){ return p.ocena[x.id] !== 0 && p.ocena[x.id] !== 1; }).length;
+        return '<option value="' + x.id + '"' + (x.id === e.id ? ' selected' : '') + '>' + esc(x.tytul) + (brak ? ' – do oceny: ' + brak : ' ✓') + '</option>';
+      }).join("") + '</select></label><label><input type="checkbox" id="tylko-nieoc"' + (rysujZadania.tylko ? ' checked' : '') + '> tylko nieocenione</label></div>' +
+      '<div class="klucz"><b>Klucz:</b> ' + esc(e.klucz) + '</div>';
+    var pokaz = lista.filter(function(p){ return !rysujZadania.tylko || (p.ocena[e.id] !== 0 && p.ocena[e.id] !== 1); });
+    if (!pokaz.length) html += '<p>Brak prac do pokazania.</p>';
+    pokaz.forEach(function(p){
+      html += '<div class="el"><h3>' + esc(p.imie || "(bez nazwiska)") + ' <span style="font-weight:400;color:#666">· ' + esc(p.klasa) + '</span></h3>' +
+        pokazOdp(p, e.pola) + przyciski(p, e) + '</div>';
+    });
+    $("widok").innerHTML = html;
+    podepnijPrzyciski();
+    $("wyb-zad").onchange = function(){ wybraneZadanie = this.value; rysuj(); };
+    $("tylko-nieoc").onchange = function(){ rysujZadania.tylko = this.checked; rysuj(); };
+  }
+
+  function csv(){
+    var w = [["Uczeń","Klasa","Oddano","Zamknięte","Otwarte","Suma","Max","Procent","Ocenione w całości"]];
+    widoczne().forEach(function(p){
+      var r = wynik(p);
+      w.push([p.imie, p.klasa, new Date(p.oddano).toLocaleString("pl-PL"), r.auto, r.otw, r.suma, K.max, Math.round(r.suma / K.max * 100), r.gotowe ? "tak" : "nie"]);
+    });
+    var tekst = "﻿" + w.map(function(r){ return r.map(function(c){ return '"' + String(c).replace(/"/g, '""') + '"'; }).join(";"); }).join("\r\n");
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([tekst], {type:"text/csv;charset=utf-8"}));
+    a.download = "Wyniki - Upadek Rzeczypospolitej" + ($("filtr-klasa").value ? " - " + $("filtr-klasa").value : "") + ".csv";
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+
+  // ---------- zdarzenia ----------
+  function zaloguj(){
+    var h = $("haslo").value;
+    if (!ADRES){ $("kom-log").textContent = "Brak adresu skryptu Google w pliku panelu (stała ADRES)."; return; }
+    $("btn-zaloguj").disabled = true; $("kom-log").textContent = "Łączenie…";
+    pobierz(h).catch(function(e){
+      $("kom-log").textContent = e.message || "Nie udało się połączyć."; $("status").textContent = "";
+    }).then(function(){ $("btn-zaloguj").disabled = false; });
+  }
+  $("btn-zaloguj").onclick = zaloguj;
+  $("haslo").addEventListener("keydown", function(e){ if (e.key === "Enter") zaloguj(); });
+  $("btn-odswiez").onclick = function(){ pobierz(haslo()).catch(function(e){ komunikat(e.message, true); }); };
+  $("btn-csv").onclick = csv;
+  $("btn-wyloguj").onclick = function(){ try { sessionStorage.removeItem(SESJA); } catch(e){} location.reload(); };
+  $("filtr-klasa").onchange = function(){ wybranyUczen = null; rysuj(); };
+  document.querySelectorAll("#zakladki button").forEach(function(b){
+    b.onclick = function(){ widok = b.dataset.widok; wybranyUczen = null; rysuj(); };
+  });
+
+  if (haslo() && ADRES) pobierz(haslo()).catch(function(){ $("status").textContent = ""; });
+})();
+</script>
+</body>
+</html>
