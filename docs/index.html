@@ -83,6 +83,21 @@
   .wynik .ok{color:#1f6b3a;font-weight:700} .wynik .blad{color:#a32020;font-weight:700}
   body.oddany .wynik{display:block}
   body.oddany textarea,body.oddany input.krotka{background-color:#f6f6f6}
+  body.oddany .ostrzezenie{display:none}
+
+  /* ostrzeżenie, okno potwierdzenia, alarm o wyjściu */
+  .ostrzezenie{font-size:14px;background:#fbeaea;border-left:3px solid var(--bad);padding:6px 12px;margin:0 0 18px}
+  .tlo-okna{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px;z-index:20}
+  .tlo-okna[hidden]{display:none}
+  .okno{background:#fff;max-width:480px;width:100%;max-height:90vh;overflow:auto;border-radius:8px;padding:20px 22px;box-shadow:0 10px 40px rgba(0,0,0,.3)}
+  .okno h2{margin:0 0 10px;font-size:19px}
+  .okno ul{margin:6px 0 12px;padding-left:20px}
+  .okno li{margin:3px 0}
+  .okno li a{color:var(--accent);font-weight:700;cursor:pointer}
+  .okno-przyciski{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;margin-top:14px}
+  .alarm{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:30;max-width:calc(100% - 24px);
+    background:var(--bad);color:#fff;font-weight:700;padding:10px 16px;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.25)}
+  .alarm[hidden]{display:none}
 
 
   /* druk */
@@ -90,7 +105,7 @@
   @media print{
     body{background:#fff;font-size:11pt}
     .kartka{margin:0;padding:0;box-shadow:none;max-width:none}
-    .akcje,.zapis,.instrukcja,#btn-wyslij{display:none!important}
+    .akcje,.zapis,.instrukcja,.ostrzezenie,.tlo-okna,.alarm,#btn-wyslij{display:none!important}
     figure img{filter:grayscale(1);border-color:#999}
     figure.sredni img{max-width:110mm} figure.waski img{max-width:45mm}
     .opcje label:hover{background:none}
@@ -116,6 +131,7 @@
   </header>
 
   <p class="instrukcja">Odpowiedzi zapisują się automatycznie w tej przeglądarce. Po rozwiązaniu wszystkich zadań kliknij „Oddaj sprawdzian” na dole strony – praca zostanie wysłana do nauczyciela i nie będzie można już zmieniać odpowiedzi.</p>
+  <p class="ostrzezenie"><b>Nie opuszczaj tej strony do momentu oddania pracy.</b> Każde wyjście ze sprawdzianu – przełączenie karty lub aplikacji, zminimalizowanie okna, zamknięcie strony – jest odnotowywane razem z godziną i czasem nieobecności, a nauczyciel widzi je przy Twojej pracy.</p>
 
   <!-- ZADANIE 1 -->
   <section class="zadanie" data-zad="1" data-max="1">
@@ -254,14 +270,37 @@
   </div>
 </main>
 
+<div class="tlo-okna" id="okno" hidden>
+  <div class="okno" role="dialog" aria-modal="true" aria-labelledby="okno-tytul">
+    <h2 id="okno-tytul"></h2>
+    <div id="okno-tresc"></div>
+    <div class="okno-przyciski" id="okno-przyciski"></div>
+  </div>
+</div>
+<div class="alarm" id="alarm" hidden></div>
+
 <script>
 (function(){
   "use strict";
   // Adres aplikacji internetowej Google Apps Script (kończy się na /exec).
   var ADRES = "https://script.google.com/macros/s/AKfycbza00J-MCjksI9Zf7B8oydpLlXHYWLfoUmEVn3sQlh4cu8pFv8OCBjiK1COpq6vo6Wcjw/exec";
   var KLUCZ_ZAPISU = "upadekrp-sprawdzian-v2";
+  // Elementy sprawdzianu i pola, z których się składają (do listy nieuzupełnionych zadań).
+  var ELEMENTY = [
+    ["Zadanie 1", 1, ["z1_r","z1_u"]],
+    ["Zadanie 2", 2, ["z2_1","z2_2","z2_3","z2_4","z2_5","z2_6","z2_7"]],
+    ["Zadanie 3.1", 3, ["z3_1"]], ["Zadanie 3.2", 3, ["z3_2"]], ["Zadanie 3.3", 3, ["z3_3"]],
+    ["Zadanie 4.1", 4, ["z4_r","z4_u"]], ["Zadanie 4.2", 4, ["z4_w"]],
+    ["Zadanie 5.1", 5, ["z5_1"]], ["Zadanie 5.2", 5, ["z5_2"]],
+    ["Zadanie 6", 6, ["z6_1","z6_2","z6_3"]],
+    ["Zadanie 7.1", 7, ["z7_r","z7_u"]], ["Zadanie 7.2", 7, ["z7_2"]],
+    ["Zadanie 8.1", 8, ["z8_1"]], ["Zadanie 8.2", 8, ["z8_2"]]
+  ];
+  var MIN_WYJSCIE = 1000; // krótsze wyjścia (np. kliknięcie w pasek adresu) są pomijane
+
   var stan = wczytaj();
   if (!stan.id) { stan.id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8); zapisz(); }
+  if (!stan.wyjscia) stan.wyjscia = [];
 
   function wczytaj(){
     try { return JSON.parse(localStorage.getItem(KLUCZ_ZAPISU)) || {odp:{}}; }
@@ -279,6 +318,68 @@
   }
   function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
 
+  // ---------- okno komunikatu ----------
+  function okno(tytul, tresc, przyciski){
+    document.getElementById("okno-tytul").textContent = tytul;
+    document.getElementById("okno-tresc").innerHTML = tresc;
+    var box = document.getElementById("okno-przyciski");
+    box.innerHTML = "";
+    przyciski.forEach(function(p){
+      var b = document.createElement("button");
+      b.type = "button"; b.textContent = p.tekst;
+      if (p.glowny) b.className = "glowny";
+      b.addEventListener("click", function(){ zamknijOkno(); if (p.akcja) p.akcja(); });
+      box.appendChild(b);
+    });
+    document.getElementById("okno").hidden = false;
+    box.firstChild.focus();
+  }
+  function zamknijOkno(){ document.getElementById("okno").hidden = true; }
+
+  // ---------- nieuzupełnione zadania ----------
+  function braki(){
+    return ELEMENTY.map(function(e){
+      var puste = e[2].filter(function(n){ return !wartosc(n).trim(); }).length;
+      return puste ? {nazwa:e[0], zad:e[1], stan: puste === e[2].length ? "brak odpowiedzi" : "odpowiedź niepełna"} : null;
+    }).filter(Boolean);
+  }
+  function przejdzDo(zad){
+    var s = document.querySelector('.zadanie[data-zad="' + zad + '"]');
+    if (s) s.scrollIntoView({behavior:"smooth", block:"start"});
+  }
+
+  // ---------- wyjścia ze strony ----------
+  // Liczone od pierwszej wpisanej odpowiedzi do oddania pracy.
+  function sledzenie(){ return stan.start && !stan.oddany; }
+  function poza(){ return document.visibilityState === "hidden"; }
+  function wyjscie(){
+    if (!sledzenie() || stan.wyjscieOd) return;
+    stan.wyjscieOd = Date.now(); zapisz();
+  }
+  function powrot(zamkniecie){
+    if (!stan.wyjscieOd || (!zamkniecie && poza())) return;
+    var od = stan.wyjscieOd, ms = Date.now() - od;
+    delete stan.wyjscieOd;
+    if (ms >= MIN_WYJSCIE || zamkniecie){
+      stan.wyjscia.push({od: od, s: Math.round(ms / 1000), z: zamkniecie ? 1 : 0});
+      alarm("Wyjście ze sprawdzianu zostało odnotowane" + (zamkniecie ? " (strona była zamknięta lub odświeżona)" : "") +
+            ". Liczba wyjść: " + stan.wyjscia.length + ".");
+    }
+    zapisz();
+  }
+  var licznikAlarmu;
+  function alarm(t){
+    var a = document.getElementById("alarm");
+    a.textContent = t; a.hidden = false;
+    clearTimeout(licznikAlarmu);
+    licznikAlarmu = setTimeout(function(){ a.hidden = true; }, 6000);
+  }
+  document.addEventListener("visibilitychange", function(){ if (document.visibilityState === "hidden") wyjscie(); else powrot(); });
+  window.addEventListener("blur", wyjscie);
+  window.addEventListener("focus", function(){ powrot(); });
+  window.addEventListener("pagehide", wyjscie);
+
+  // ---------- odpowiedzi ----------
   function odtworz(){
     pola().forEach(function(el){
       var v = stan.odp[el.name];
@@ -296,9 +397,7 @@
   }
 
   function pokazWynik(){
-    var puste = 0;
-    pola().forEach(function(el){ if (el.type !== "radio" && !el.value.trim()) puste++; });
-    ["z3_1","z5_1","z6_1","z6_2","z6_3"].forEach(function(n){ if (!wartosc(n)) puste++; });
+    var puste = braki().length;
     var d = new Date(stan.oddany);
     var status;
     if (!ADRES) status = '<p>Pokaż ten ekran nauczycielowi.</p>';
@@ -309,7 +408,7 @@
     document.getElementById("wynik-tresc").innerHTML =
       "<p><b>" + esc(stan.odp.imie || "") + "</b>" + (stan.odp.klasa ? ", klasa " + esc(stan.odp.klasa) : "") + " – oddano " +
       d.toLocaleDateString("pl-PL") + ", godz. " + d.toLocaleTimeString("pl-PL",{hour:"2-digit",minute:"2-digit"}) + ".</p>" +
-      (puste ? "<p>Liczba pustych pól odpowiedzi: " + puste + ".</p>" : "") + status;
+      (puste ? "<p>Liczba nieuzupełnionych zadań: " + puste + ".</p>" : "") + status;
     var b = document.getElementById("btn-wyslij");
     if (b) b.addEventListener("click", wyslij);
   }
@@ -317,8 +416,10 @@
   function wyslij(){
     if (!ADRES) return;
     stan.wysylanie = true; pokazWynik();
+    // Wyjścia ze strony jadą razem z odpowiedziami, więc skrypt Google zapisuje je bez zmian.
+    var odp = Object.assign({}, stan.odp, {_kontrola: {wyjscia: stan.wyjscia, otwarcia: stan.otwarcia || 0}});
     fetch(ADRES, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
-      body: JSON.stringify({akcja:"oddaj", id:stan.id, imie:stan.odp.imie, klasa:stan.odp.klasa, odp:stan.odp})})
+      body: JSON.stringify({akcja:"oddaj", id:stan.id, imie:stan.odp.imie, klasa:stan.odp.klasa, odp:odp})})
       .then(function(r){ return r.json(); })
       .then(function(j){ if (!j.ok) throw new Error(j.blad || "blad"); stan.wyslany = true; })
       .catch(function(){ stan.wyslany = false; })
@@ -329,6 +430,7 @@
   function zmiana(e){
     var el = e.target;
     if (!el.name || stan.oddany) return;
+    if (!stan.start) stan.start = Date.now();
     stan.odp[el.name] = (el.type === "radio") ? (el.checked ? el.value : stan.odp[el.name]) : el.value;
     var ok = zapisz();
     clearTimeout(licznik);
@@ -338,20 +440,45 @@
   document.querySelector("main").addEventListener("input", zmiana);
   document.querySelector("main").addEventListener("change", zmiana);
 
-  document.getElementById("btn-oddaj").addEventListener("click", function(){
-    if (!wartosc("imie").trim()){ alert("Wpisz imię i nazwisko na górze strony."); document.getElementById("imie").focus(); return; }
-    if (!wartosc("klasa").trim()){ alert("Wpisz klasę na górze strony."); document.getElementById("klasa").focus(); return; }
-    if (!confirm("Czy na pewno oddać sprawdzian? Po oddaniu nie można zmieniać odpowiedzi.")) return;
-    stan.oddany = Date.now(); stan.wyslany = false; zapisz();
+  function oddaj(){
+    stan.oddany = Date.now(); stan.wyslany = false; delete stan.wyjscieOd; zapisz();
     zablokuj(true); pokazWynik(); wyslij();
     document.getElementById("wynik").scrollIntoView({behavior:"smooth"});
+  }
+
+  document.getElementById("btn-oddaj").addEventListener("click", function(){
+    if (!wartosc("imie").trim() || !wartosc("klasa").trim()){
+      var pole = !wartosc("imie").trim() ? "imie" : "klasa";
+      okno("Uzupełnij dane", "<p>Przed oddaniem wpisz na górze strony " + (pole === "imie" ? "imię i nazwisko" : "klasę") + ".</p>",
+        [{tekst:"Wróć", glowny:true, akcja:function(){ document.getElementById(pole).focus(); }}]);
+      return;
+    }
+    var lista = braki();
+    var pytanie = "<p><b>Czy na pewno chcesz oddać sprawdzian?</b> Po oddaniu nie można już zmieniać odpowiedzi.</p>";
+    var tresc = lista.length
+      ? "<p>Nie wszystkie zadania są uzupełnione:</p><ul>" + lista.map(function(b){
+          return '<li><a data-zad="' + b.zad + '">' + b.nazwa + "</a> – " + b.stan + "</li>";
+        }).join("") + "</ul>" + pytanie
+      : "<p>Wszystkie zadania są uzupełnione.</p>" + pytanie;
+    okno(lista.length ? "Masz nieuzupełnione zadania" : "Oddać sprawdzian?", tresc, [
+      {tekst: lista.length ? "Wróć i uzupełnij" : "Wróć do sprawdzianu"},
+      {tekst: lista.length ? "Oddaj mimo to" : "Oddaj sprawdzian", glowny:true, akcja:oddaj}
+    ]);
+    document.querySelectorAll("#okno-tresc a[data-zad]").forEach(function(a){
+      a.addEventListener("click", function(){ zamknijOkno(); przejdzDo(a.dataset.zad); });
+    });
   });
+  document.getElementById("okno").addEventListener("keydown", function(e){ if (e.key === "Escape") zamknijOkno(); });
   document.getElementById("btn-drukuj").addEventListener("click", function(){ window.print(); });
 
   odtworz();
   if (stan.oddany){
     zablokuj(true); stan.wysylanie = false; pokazWynik();
     if (!stan.wyslany) wyslij();
+  } else if (stan.start){
+    // Ponowne otwarcie strony w trakcie pisania (odświeżenie albo zamknięcie i powrót).
+    stan.otwarcia = (stan.otwarcia || 0) + 1;
+    if (stan.wyjscieOd) powrot(true); else zapisz();
   }
 })();
 
