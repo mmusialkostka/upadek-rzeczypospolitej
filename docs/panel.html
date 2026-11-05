@@ -26,6 +26,7 @@
   table{border-collapse:collapse;width:100%}
   th,td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top}
   th{font-size:13px;color:var(--muted);font-weight:600;white-space:nowrap}
+  th[data-sort]{cursor:pointer;user-select:none} th[data-sort]:hover{color:var(--ink)} th.sort-akt{color:var(--ink)}
   td.liczba,th.liczba{text-align:right;white-space:nowrap}
   tr.wiersz{cursor:pointer} tr.wiersz:hover{background:#f6f4ef}
   .tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:10px;background:#eee;color:#333}
@@ -75,6 +76,11 @@
   <div id="ekran-panelu" hidden>
     <div class="pasek-narz" style="margin-bottom:12px">
       <label>Klasa: <select id="filtr-klasa"><option value="">wszystkie</option></select></label>
+      <label>Sortuj: <select id="sortuj">
+        <option value="nazwisko">nazwisko</option><option value="klasa">klasa</option><option value="wersja">wersja</option>
+        <option value="oddano">data oddania</option><option value="suma">wynik</option><option value="wyjscia">wyjścia ze strony</option><option value="status">status oceny</option>
+      </select></label>
+      <button id="btn-kierunek" title="Zmień kierunek sortowania">↑ rosnąco</button>
       <span class="odstep"></span>
       <button id="btn-odswiez">Odśwież</button>
       <button id="btn-csv">Pobierz wyniki (CSV)</button>
@@ -163,10 +169,42 @@
   }
   function haslo(){ try { return sessionStorage.getItem(SESJA) || ""; } catch(e){ return ""; } }
 
+  // ---------- sortowanie ----------
+  var SORT = "upadekrp-panel-sort";
+  var sortuj = (function(){ try { return JSON.parse(localStorage.getItem(SORT)) || null; } catch(e){ return null; } })() || {pole:"nazwisko", kier:1};
+  // „Jan Kowalski” → „Kowalski Jan”, żeby sortować po nazwisku.
+  function nazwisko(p){
+    var cz = String(p.imie || "").trim().split(/\s+/);
+    return cz.length > 1 ? cz[cz.length - 1] + " " + cz.slice(0, -1).join(" ") : cz[0];
+  }
+  function wartoscSort(p){
+    switch (sortuj.pole){
+      case "klasa": return p.klasa || "";
+      case "wersja": return wersja(p);
+      case "oddano": return new Date(p.oddano).getTime() || 0;
+      case "suma": return wynik(p).suma;
+      case "wyjscia": var k = kontrola(p); return k ? k.wyjscia.length : -1;
+      case "status": return wynik(p).gotowe ? 1 : 0;
+      default: return nazwisko(p);
+    }
+  }
+  function porownaj(a, b){
+    var x = wartoscSort(a), y = wartoscSort(b);
+    var w = typeof x === "number" ? x - y : String(x).localeCompare(String(y), "pl", {numeric:true});
+    return w * sortuj.kier || nazwisko(a).localeCompare(nazwisko(b), "pl");
+  }
+  function ustawSort(pole, kier){
+    sortuj = {pole:pole, kier:kier};
+    try { localStorage.setItem(SORT, JSON.stringify(sortuj)); } catch(e){}
+    $("sortuj").value = pole;
+    $("btn-kierunek").textContent = kier > 0 ? "↑ rosnąco" : "↓ malejąco";
+    rysuj();
+  }
+
   function widoczne(){
     var k = $("filtr-klasa").value;
     // Bez klucza B (stary skrypt) prac z wersji B nie da się ocenić, więc ich nie pokazujemy.
-    return prace.filter(function(p){ return (!k || p.klasa === k) && kl(p); });
+    return prace.filter(function(p){ return (!k || p.klasa === k) && kl(p); }).sort(porownaj);
   }
   function odswiezFiltr(){
     var sel = $("filtr-klasa"), stara = sel.value;
@@ -202,7 +240,10 @@
     var bezB = prace.filter(function(p){ return !kl(p); }).length;
     var html = (bezB ? '<p class="blad">Prace z wersji B (' + bezB + ') są ukryte, bo skrypt Google nie ma jeszcze klucza wersji B. Wklej nowy Kod.gs i wdróż nową wersję skryptu.</p>' : '') +
       '<p class="podsum"><span>Oddane prace: <b>' + lista.length + '</b></span><span>Do dokończenia oceny: <b>' + doOceny + '</b></span></p>' +
-      '<table><tr><th>Uczeń</th><th>Klasa</th><th>Oddano</th><th class="liczba">Zamknięte</th><th class="liczba">Otwarte</th><th class="liczba">Suma</th><th class="liczba">%</th><th class="liczba">Wyjścia</th><th>Status</th></tr>';
+      '<table><tr>' + [["Uczeń","nazwisko"],["Klasa","klasa"],["Oddano","oddano"],["Zamknięte",""],["Otwarte",""],["Suma","suma"],["%","suma"],["Wyjścia","wyjscia"],["Status","status"]].map(function(k, i){
+        var akt = k[1] && k[1] === sortuj.pole && i !== 6, kl = (i >= 3 && i <= 7 ? "liczba" : "") + (akt ? " sort-akt" : "");
+        return '<th' + (kl ? ' class="' + kl.trim() + '"' : '') + (k[1] ? ' data-sort="' + k[1] + '" title="Sortuj"' : '') + '>' + k[0] + (akt ? (sortuj.kier > 0 ? " ▲" : " ▼") : "") + '</th>';
+      }).join("") + '</tr>';
     lista.forEach(function(p){
       var w = wynik(p), d = new Date(p.oddano), K = kl(p);
       html += '<tr class="wiersz" data-id="' + esc(p.id) + '"><td>' + esc(p.imie || "(bez nazwiska)") + tagWersji(p) + '</td><td>' + esc(p.klasa) + '</td>' +
@@ -215,6 +256,9 @@
         '<td>' + (w.gotowe ? '<span class="tag gotowe">ocenione</span>' : '<span class="tag do">do oceny</span>') + '</td></tr>';
     });
     $("widok").innerHTML = html + '</table>';
+    $("widok").querySelectorAll("th[data-sort]").forEach(function(th){
+      th.addEventListener("click", function(){ var pole = th.dataset.sort; ustawSort(pole, pole === sortuj.pole ? -sortuj.kier : 1); });
+    });
     $("widok").querySelectorAll("tr.wiersz").forEach(function(tr){
       tr.addEventListener("click", function(){ wybranyUczen = tr.dataset.id; rysuj(); window.scrollTo(0, 0); });
     });
@@ -352,6 +396,9 @@
   $("btn-csv").onclick = csv;
   $("btn-wyloguj").onclick = function(){ try { sessionStorage.removeItem(SESJA); } catch(e){} location.reload(); };
   $("filtr-klasa").onchange = function(){ wybranyUczen = null; rysuj(); };
+  $("sortuj").onchange = function(){ ustawSort(this.value, 1); };
+  $("btn-kierunek").onclick = function(){ ustawSort(sortuj.pole, -sortuj.kier); };
+  $("sortuj").value = sortuj.pole; $("btn-kierunek").textContent = sortuj.kier > 0 ? "↑ rosnąco" : "↓ malejąco";
   document.querySelectorAll("#zakladki button").forEach(function(b){
     b.onclick = function(){ widok = b.dataset.widok; wybranyUczen = null; rysuj(); };
   });
