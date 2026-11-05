@@ -30,6 +30,7 @@
   tr.wiersz{cursor:pointer} tr.wiersz:hover{background:#f6f4ef}
   .tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:10px;background:#eee;color:#333}
   .tag.do{background:#fff3cd;color:#7a5a00} .tag.gotowe{background:var(--okbg);color:var(--ok)}
+  .tag.wer{background:#e3e8f4;color:#23407a;font-weight:700}
   .tag.wyj{background:var(--badbg);color:var(--bad);font-weight:700}
   .wyjscia{background:var(--badbg);border-left:3px solid var(--bad);padding:8px 12px;margin:10px 0 4px}
   .wyjscia.czysto{background:var(--okbg);border-color:var(--ok)}
@@ -93,7 +94,7 @@
   // Adres aplikacji internetowej Google Apps Script (ten sam co na stronie ucznia).
   var ADRES = "https://script.google.com/macros/s/AKfycbza00J-MCjksI9Zf7B8oydpLlXHYWLfoUmEVn3sQlh4cu8pFv8OCBjiK1COpq6vo6Wcjw/exec";
   var SESJA = "upadekrp-panel-haslo";
-  var K = null, prace = [], widok = "lista", wybranyUczen = null, wybraneZadanie = null;
+  var KA = null, KB = null, prace = [], widok = "lista", wybranyUczen = null, wybraneZadanie = null, wybranaWersja = "A";
 
   var $ = function(id){ return document.getElementById(id); };
   function esc(s){ return String(s == null ? "" : s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
@@ -104,6 +105,12 @@
       .then(function(r){ return r.json(); });
   }
 
+  // ---------- wersje sprawdzianu ----------
+  // Prace z drugiej wersji mają w odpowiedziach _wersja: "B"; starsze prace bez tego pola to wersja A.
+  function wersja(p){ return p.odp._wersja === "B" ? "B" : "A"; }
+  function kl(p){ return wersja(p) === "B" ? KB : KA; }
+  function tagWersji(p){ return wersja(p) === "B" ? ' <span class="tag wer">wersja B</span>' : ''; }
+
   // ---------- punktacja ----------
   function punktyAuto(p, grupa){
     var n = 0;
@@ -112,7 +119,7 @@
     return 0;
   }
   function wynik(p){
-    var auto = 0, autoMax = 0, otw = 0, ocenione = 0;
+    var K = kl(p), auto = 0, autoMax = 0, otw = 0, ocenione = 0;
     K.auto.forEach(function(g){ auto += punktyAuto(p, g); autoMax += g.max; });
     K.otwarte.forEach(function(e){ var v = p.ocena[e.id]; if (v === 0 || v === 1){ otw += v; ocenione++; } });
     var gotowe = ocenione === K.otwarte.length;
@@ -145,7 +152,7 @@
     $("status").textContent = "Pobieranie…";
     return zapytanie({akcja:"lista", haslo:haslo}).then(function(j){
       if (!j.ok) throw new Error(j.blad === "haslo" ? "Nieprawidłowe hasło." : "Błąd serwera: " + j.blad);
-      K = j.klucz;
+      KA = j.klucz; KB = j.kluczB || null;
       prace = j.prace.map(function(p){ p.odp = p.odp || {}; p.ocena = p.ocena || {}; return p; })
         .sort(function(a, b){ return (a.klasa + a.imie).localeCompare(b.klasa + b.imie, "pl"); });
       try { sessionStorage.setItem(SESJA, haslo); } catch(e){}
@@ -158,7 +165,8 @@
 
   function widoczne(){
     var k = $("filtr-klasa").value;
-    return prace.filter(function(p){ return !k || p.klasa === k; });
+    // Bez klucza B (stary skrypt) prac z wersji B nie da się ocenić, więc ich nie pokazujemy.
+    return prace.filter(function(p){ return (!k || p.klasa === k) && kl(p); });
   }
   function odswiezFiltr(){
     var sel = $("filtr-klasa"), stara = sel.value;
@@ -191,11 +199,13 @@
     var lista = widoczne();
     if (!lista.length){ $("widok").innerHTML = "<p>Nie ma jeszcze oddanych prac.</p>"; return; }
     var doOceny = lista.filter(function(p){ return !wynik(p).gotowe; }).length;
-    var html = '<p class="podsum"><span>Oddane prace: <b>' + lista.length + '</b></span><span>Do dokończenia oceny: <b>' + doOceny + '</b></span></p>' +
+    var bezB = prace.filter(function(p){ return !kl(p); }).length;
+    var html = (bezB ? '<p class="blad">Prace z wersji B (' + bezB + ') są ukryte, bo skrypt Google nie ma jeszcze klucza wersji B. Wklej nowy Kod.gs i wdróż nową wersję skryptu.</p>' : '') +
+      '<p class="podsum"><span>Oddane prace: <b>' + lista.length + '</b></span><span>Do dokończenia oceny: <b>' + doOceny + '</b></span></p>' +
       '<table><tr><th>Uczeń</th><th>Klasa</th><th>Oddano</th><th class="liczba">Zamknięte</th><th class="liczba">Otwarte</th><th class="liczba">Suma</th><th class="liczba">%</th><th class="liczba">Wyjścia</th><th>Status</th></tr>';
     lista.forEach(function(p){
-      var w = wynik(p), d = new Date(p.oddano);
-      html += '<tr class="wiersz" data-id="' + esc(p.id) + '"><td>' + esc(p.imie || "(bez nazwiska)") + '</td><td>' + esc(p.klasa) + '</td>' +
+      var w = wynik(p), d = new Date(p.oddano), K = kl(p);
+      html += '<tr class="wiersz" data-id="' + esc(p.id) + '"><td>' + esc(p.imie || "(bez nazwiska)") + tagWersji(p) + '</td><td>' + esc(p.klasa) + '</td>' +
         '<td>' + d.toLocaleDateString("pl-PL") + ' ' + d.toLocaleTimeString("pl-PL", {hour:"2-digit", minute:"2-digit"}) + '</td>' +
         '<td class="liczba">' + w.auto + ' / ' + w.autoMax + '</td>' +
         '<td class="liczba">' + w.otw + ' / ' + K.otwarte.length + (w.gotowe ? '' : ' <span class="pusta">(' + w.ocenione + ' ocen.)</span>') + '</td>' +
@@ -227,7 +237,7 @@
     $("widok").querySelectorAll(".ocena button").forEach(function(b){
       b.addEventListener("click", function(){
         var box = b.parentNode, p = prace.find(function(x){ return x.id === box.dataset.id; });
-        var e = K.otwarte.find(function(x){ return x.id === box.dataset.el; });
+        var e = kl(p).otwarte.find(function(x){ return x.id === box.dataset.el; });
         ocen(p, e.id, Number(b.dataset.v));
         box.querySelectorAll("button").forEach(function(x){ x.className = ""; });
         b.className = "wyb" + b.dataset.v;
@@ -239,14 +249,14 @@
   function rysujUcznia(){
     var lista = widoczne(), i = lista.findIndex(function(x){ return x.id === wybranyUczen; });
     var p = lista[i] || prace.find(function(x){ return x.id === wybranyUczen; });
-    if (!p){ wybranyUczen = null; return rysuj(); }
-    var w = wynik(p);
+    if (!p || !kl(p)){ wybranyUczen = null; return rysuj(); }
+    var w = wynik(p), K = kl(p);
     var html = '<div class="nawig"><button id="n-wroc">← Lista</button>' +
       '<button id="n-poprz"' + (i > 0 ? '' : ' disabled') + '>‹ Poprzedni</button>' +
       '<button id="n-nast"' + (i >= 0 && i < lista.length - 1 ? '' : ' disabled') + '>Następny ›</button>' +
       '<button id="n-nieoc">Następny nieoceniony</button><span class="odstep" style="flex:1"></span>' +
       '<button id="n-usun">Usuń pracę</button></div>' +
-      '<h2 style="margin:4px 0">' + esc(p.imie || "(bez nazwiska)") + ' <span style="font-weight:400;color:#666">· ' + esc(p.klasa) + '</span></h2>' +
+      '<h2 style="margin:4px 0">' + esc(p.imie || "(bez nazwiska)") + ' <span style="font-weight:400;color:#666">· ' + esc(p.klasa) + '</span>' + tagWersji(p) + '</h2>' +
       '<p class="podsum" id="podsum-ucznia"></p>' + opisWyjsc(p);
 
     html += '<h3>Zadania zamknięte (sprawdzone automatycznie)</h3><table class="auto">';
@@ -286,10 +296,14 @@
   }
 
   function rysujZadania(){
-    if (!wybraneZadanie) wybraneZadanie = K.otwarte[0].id;
-    var e = K.otwarte.find(function(x){ return x.id === wybraneZadanie; });
-    var lista = widoczne();
-    var html = '<div class="pasek-narz" style="margin-bottom:8px"><label>Element: <select id="wyb-zad">' +
+    if (wybranaWersja === "B" && !KB) wybranaWersja = "A";
+    var K = wybranaWersja === "B" ? KB : KA;
+    var e = K.otwarte.find(function(x){ return x.id === wybraneZadanie; }) || K.otwarte[0];
+    wybraneZadanie = e.id;
+    var lista = widoczne().filter(function(p){ return wersja(p) === wybranaWersja; });
+    var html = '<div class="pasek-narz" style="margin-bottom:8px"><label>Wersja: <select id="wyb-wersja">' +
+      ['A', 'B'].map(function(v){ return '<option' + (v === wybranaWersja ? ' selected' : '') + (v === "B" && !KB ? ' disabled' : '') + '>' + v + '</option>'; }).join("") +
+      '</select></label><label>Element: <select id="wyb-zad">' +
       K.otwarte.map(function(x){
         var brak = lista.filter(function(p){ return p.ocena[x.id] !== 0 && p.ocena[x.id] !== 1; }).length;
         return '<option value="' + x.id + '"' + (x.id === e.id ? ' selected' : '') + '>' + esc(x.tytul) + (brak ? ' – do oceny: ' + brak : ' ✓') + '</option>';
@@ -305,14 +319,15 @@
     $("widok").innerHTML = html;
     podepnijPrzyciski();
     $("wyb-zad").onchange = function(){ wybraneZadanie = this.value; rysuj(); };
+    $("wyb-wersja").onchange = function(){ wybranaWersja = this.value; wybraneZadanie = null; rysuj(); };
     $("tylko-nieoc").onchange = function(){ rysujZadania.tylko = this.checked; rysuj(); };
   }
 
   function csv(){
-    var w = [["Uczeń","Klasa","Oddano","Zamknięte","Otwarte","Suma","Max","Procent","Ocenione w całości","Wyjścia ze strony","Czas poza stroną (s)"]];
+    var w = [["Uczeń","Klasa","Wersja","Oddano","Zamknięte","Otwarte","Suma","Max","Procent","Ocenione w całości","Wyjścia ze strony","Czas poza stroną (s)"]];
     widoczne().forEach(function(p){
-      var r = wynik(p);
-      w.push([p.imie, p.klasa, new Date(p.oddano).toLocaleString("pl-PL"), r.auto, r.otw, r.suma, K.max, Math.round(r.suma / K.max * 100), r.gotowe ? "tak" : "nie",
+      var r = wynik(p), K = kl(p);
+      w.push([p.imie, p.klasa, wersja(p), new Date(p.oddano).toLocaleString("pl-PL"), r.auto, r.otw, r.suma, K.max, Math.round(r.suma / K.max * 100), r.gotowe ? "tak" : "nie",
         kontrola(p) ? kontrola(p).wyjscia.length : "", kontrola(p) ? sumaPoza(kontrola(p)) : ""]);
     });
     var tekst = "﻿" + w.map(function(r){ return r.map(function(c){ return '"' + String(c).replace(/"/g, '""') + '"'; }).join(";"); }).join("\r\n");

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Upadek Rzeczypospolitej – sprawdzian</title>
+<title>Upadek Rzeczypospolitej – sprawdzian (wersja A)</title>
 <style>
   :root{
     --ink:#1b1b1b; --muted:#5d5d5d; --line:#9a9a9a; --bar:#d9d9d9;
@@ -120,7 +120,7 @@
   <header class="naglowek">
     <div>
       <h1>UPADEK RZECZYPOSPOLITEJ</h1>
-      <div class="przedmiot">HISTORIA | POZIOM PODSTAWOWY</div>
+      <div class="przedmiot">HISTORIA | POZIOM PODSTAWOWY | WERSJA A</div>
       <div class="imie"><label for="imie">Imię i nazwisko:</label><input id="imie" name="imie" autocomplete="off"></div>
       <div class="imie"><label for="klasa">Klasa:</label><input id="klasa" name="klasa" autocomplete="off" style="flex:none;min-width:0;width:90px"></div>
     </div>
@@ -285,6 +285,7 @@
   // Adres aplikacji internetowej Google Apps Script (kończy się na /exec).
   var ADRES = "https://script.google.com/macros/s/AKfycbza00J-MCjksI9Zf7B8oydpLlXHYWLfoUmEVn3sQlh4cu8pFv8OCBjiK1COpq6vo6Wcjw/exec";
   var KLUCZ_ZAPISU = "upadekrp-sprawdzian-v2";
+  var WERSJA = "A"; // wersja sprawdzianu (grupa), widoczna w panelu nauczyciela
   // Elementy sprawdzianu i pola, z których się składają (do listy nieuzupełnionych zadań).
   var ELEMENTY = [
     ["Zadanie 1", 1, ["z1_r","z1_u"]],
@@ -417,7 +418,7 @@
     if (!ADRES) return;
     stan.wysylanie = true; pokazWynik();
     // Wyjścia ze strony jadą razem z odpowiedziami, więc skrypt Google zapisuje je bez zmian.
-    var odp = Object.assign({}, stan.odp, {_kontrola: {wyjscia: stan.wyjscia, otwarcia: stan.otwarcia || 0}});
+    var odp = Object.assign({}, stan.odp, {_wersja: WERSJA, _kontrola: {wyjscia: stan.wyjscia, otwarcia: stan.otwarcia || 0}});
     fetch(ADRES, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
       body: JSON.stringify({akcja:"oddaj", id:stan.id, imie:stan.odp.imie, klasa:stan.odp.klasa, odp:odp})})
       .then(function(r){ return r.json(); })
